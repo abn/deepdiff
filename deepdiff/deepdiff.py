@@ -3,11 +3,13 @@
 
 from __future__ import print_function
 
-import difflib
 import datetime
+import difflib
 import json
 from decimal import Decimal
 from sys import version
+
+from six import string_types, binary_type
 
 py3 = version[0] == '3'
 
@@ -208,7 +210,7 @@ class DeepDiff(dict):
         self.ignore_order = ignore_order
 
         self.update({"type_changes": [], "dic_item_added": [], "dic_item_removed": [],
-                     "values_changed": [], "unprocessed": [], "iterable_item_added": [], "iterable_item_removed": [],
+                     "values_changed": {}, "unprocessed": [], "iterable_item_added": [], "iterable_item_removed": [],
                      "attribute_added": [], "attribute_removed": [], "set_item_removed": [], "set_item_added": []})
 
         self.__diff(t1, t2, parents_ids=frozenset({id(t1)}))
@@ -342,9 +344,9 @@ class DeepDiff(dict):
             diff = list(diff)
             if diff:
                 diff = '\n'.join(diff)
-                self["values_changed"].append("%s:\n%s" % (parent, diff))
+                self["values_changed"][parent] = {"diff": diff}
         elif t1 != t2:
-            self["values_changed"].append("%s: '%s' ===> '%s'" % (parent, t1, t2))
+            self["values_changed"][parent] = {"old": t1, "new": t2}
 
     def __diff_tuple(self, t1, t2, parent, parents_ids):
         # Checking to see if it has _fields. Which probably means it is a named tuple.
@@ -363,16 +365,18 @@ class DeepDiff(dict):
         if t1 is t2:
             return
 
-        if type(t1) != type(t2):
-            self["type_changes"].append(
-                "%s: %s=%s ===> %s=%s" % (parent, t1, self.__gettype(t1), t2, self.__gettype(t2)))
+        if type(t1) != type(t2) and \
+                not (isinstance(t1, (string_types, binary_type)) and isinstance(t2, (string_types, binary_type))) and \
+                not (isinstance(t1, type(t2)) or isinstance(t2, type(t1))):
+                self["type_changes"].append(
+                    "%s: %s=%s ===> %s=%s" % (parent, t1, self.__gettype(t1), t2, self.__gettype(t2)))
 
         elif isinstance(t1, (basestring, bytes)):
             self.__diff_str(t1, t2, parent)
 
         elif isinstance(t1, numbers):
             if t1 != t2:
-                self["values_changed"].append("%s: %s ===> %s" % (parent, t1, t2))
+                self["values_changed"][parent] = {"old": t1, "new": t2}
 
         elif isinstance(t1, dict):
             self.__diff_dict(t1, t2, parent, parents_ids)
